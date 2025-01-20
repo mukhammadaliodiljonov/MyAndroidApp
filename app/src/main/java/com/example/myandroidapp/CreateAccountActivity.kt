@@ -1,81 +1,107 @@
 package com.example.myandroidapp
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.TextView
+import android.widget.Toast
+import androidx.fragment.app.Fragment
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
-import android.widget.Button
-import android.widget.CheckBox
-import android.widget.TextView
 
+class CreateAccountFragment : Fragment() {
 
-class CreateAccountActivity : AppCompatActivity() {
+    private val credentialsManager = CredentialsManager
 
-    // Properties for Views
-    private val emailInputLayout: TextInputLayout by lazy { findViewById(R.id.textInputEmail) }
-    private val passwordInputLayout: TextInputLayout by lazy { findViewById(R.id.textInputPassword) }
-    private val emailEditText: TextInputEditText by lazy { findViewById(R.id.etEmail) }
-    private val passwordEditText: TextInputEditText by lazy { findViewById(R.id.etPassword) }
-    private val rememberMeCheckBox: CheckBox by lazy { findViewById(R.id.cbRememberMe) }
-    private val nextButton: Button by lazy { findViewById(R.id.btnNext) }
-    private val forgotPasswordTextView: TextView by lazy { findViewById(R.id.tvForgotPassword) }
-    private val registerNowTextView: TextView by lazy { findViewById(R.id.tvRegisterNoww) }
+    private lateinit var emailField: TextInputEditText
+    private lateinit var emailLayout: TextInputLayout
+    private lateinit var passwordField: TextInputEditText
+    private lateinit var passwordLayout: TextInputLayout
+    private lateinit var nextButton: Button
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_create_account)
+    override fun onCreateView(
+        inflater: LayoutInflater, container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        val view = inflater.inflate(R.layout.activity_create_account, container, false)
 
-        setupListeners()
-    }
+        emailField = view.findViewById(R.id.etEmail)
+        emailLayout = view.findViewById(R.id.textInputEmail)
+        passwordField = view.findViewById(R.id.etPassword)
+        passwordLayout = view.findViewById(R.id.textInputPassword)
+        nextButton = view.findViewById(R.id.btnNext)
 
-    private fun setupListeners() {
-        nextButton.setOnClickListener { validateAndLogin() }
-        registerNowTextView.setOnClickListener { navigateToSignUpActivity() }
-    }
+        nextButton.setOnClickListener { onNextButtonClick() }
 
-    private fun validateAndLogin() {
-        val email = emailEditText.text.toString()
-        val password = passwordEditText.text.toString()
-
-        var isValid = true
-
-        // Email Validation
-        if (email.isEmpty() || !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-            emailInputLayout.error = "Invalid email address"
-            isValid = false
-        } else {
-            emailInputLayout.error = null
+        view.findViewById<TextView>(R.id.tvRegisterNoww).setOnClickListener {
+            navigateToSignUpDetailsFragment()
         }
 
-        // Password Validation
-        if (password.isEmpty() || password.length < 4) {
-            passwordInputLayout.error = "Password must be at least 4 characters"
-            isValid = false
-        } else {
-            passwordInputLayout.error = null
-        }
+        return view
+    }
 
-        // Check Credentials
-        if (isValid) {
-            if (CredentialsManager.validateCredentials(email, password)) {
-                navigateToMainActivity()
-            } else {
-                passwordInputLayout.error = "Incorrect email or password"
+    private fun onNextButtonClick() {
+        val email = emailField.text.toString().trim()
+        val password = passwordField.text.toString().trim()
+
+        clearAllErrors()
+
+        when {
+            email.isEmpty() -> setError(emailLayout, R.string.error_email_required)
+            !credentialsManager.isEmailValid(email) -> setError(
+                emailLayout,
+                R.string.error_invalid_email
+            )
+
+            password.isEmpty() -> setError(passwordLayout, R.string.error_password_required)
+            !credentialsManager.isValidPassword(password) -> setError(
+                passwordLayout,
+                R.string.error_password_invalid
+            )
+
+            else -> {
+                if (CredentialsManager.validateCredentials(email, password)) {
+                    navigateToMainActivity(email, password)
+                } else {
+                    showToast(R.string.error_invalid_credentials)
+                }
             }
         }
     }
 
-    private fun navigateToSignUpActivity() {
-        val intent = Intent(this, SignUpActivity::class.java)
-        intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
-        startActivity(intent)
+    private fun setError(layout: TextInputLayout, errorResId: Int?) {
+        layout.error = errorResId?.let { getString(it) }
     }
 
-    private fun navigateToMainActivity() {
-        val intent = Intent(this, MainActivity::class.java)
-        intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+    private fun clearAllErrors() {
+        setError(emailLayout, null)
+        setError(passwordLayout, null)
+    }
+
+    private fun showToast(messageResId: Int) {
+        Toast.makeText(requireContext(), getString(messageResId), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun navigateToMainActivity(email: String, password: String) {
+        credentialsManager.setLoggedIn(requireContext(), true)
+        credentialsManager.saveUserCredentials(requireContext(), email, password)
+
+        val intent = Intent(requireContext(), MainActivity::class.java).apply {
+            putExtra("email", email)
+            putExtra("password", password)
+        }
         startActivity(intent)
-        finish()
+        requireActivity().finish()
+    }
+
+    private fun navigateToSignUpDetailsFragment() {
+        parentFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainerView, SignUpDetailsFragment())
+            .addToBackStack(null)
+            .commit()
     }
 }
